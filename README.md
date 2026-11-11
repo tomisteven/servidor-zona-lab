@@ -152,6 +152,17 @@ tests/
 scripts/
 ```
 
+## Documentación
+
+- [AGENTS.md](AGENTS.md): reglas de trabajo para agentes.
+- [Arquitectura](docs/ARCHITECTURE.md).
+- [API](docs/API.md) y [convenciones](docs/API_CONVENTIONS.md).
+- [Entorno](docs/ENVIRONMENT.md).
+- [Despliegue](docs/DEPLOYMENT.md).
+- [Seguridad](docs/SECURITY.md).
+- [Testing](docs/TESTING.md).
+- [Decisiones](docs/decisions/).
+
 ## Calidad
 
 El workflow de `.github/workflows/ci.yml` ejecuta instalación, lint, formato y pruebas. Las pruebas de integración usan `mongodb-memory-server` y no requieren una base externa.
