@@ -60,17 +60,33 @@ Baja:
 - CORS permitido/rechazado.
 - 404, JSON malformado y errores centralizados.
 - Pricing: tramos, mínimos, opciones y `custom`.
-- Producto → estimación → pedido → archivos → admin.
-- Autenticación, cookies, CSRF y rate limiting.
-- Uploads y SVG inseguro.
+- Producto → estimación → pedido → archivos → admin, incluyendo edición, baja lógica y `customReason`.
+- Autenticación, cookies y CSRF.
+- Rate limiting en login.
+- Uploads: firmas binarias, SVG seguro e inseguro, sanitización de nombres y path traversal.
+- Validación de producto: tramos desordenados/superpuestos y grupos u opciones duplicadas.
+- Límite del campo `payload` en pedidos.
+- Media pública: subida, servido estático, borrado y protección de imágenes en uso.
 - Configuración pública y administrativa.
+- Configuración SMTP cifrada, exclusión de secretos en la API pública y correo de prueba.
+- Estado y notas internas de pedidos.
+- Atribución UTM/marketing en pedidos.
+- Formulario de contacto, dashboard y auditoría administrativa.
+- Reseñas públicas, moderación y resumen de rating.
+- Exportación CSV, anonimización y borrado de pedidos.
+- Biblioteca de medios, variantes responsive y protección de imágenes en uso.
+- Cifrado AES-256-GCM de secretos y notificaciones de pedidos escapadas.
+- Scripts de seed, optimización de media, limpieza y backup se validan manualmente en desarrollo.
 
 ## Pendiente
 
 - E2E con frontend real.
 - Pruebas de carga y rendimiento.
+- Rate limiting con almacenamiento compartido entre instancias.
+- Sanitizador SVG dedicado en lugar de patrones.
 - Recuperación ante caída de MongoDB.
 - Pérdida o corrupción de archivos.
+- Programación automática de `media:cleanup` y verificación de backups.
 - Umbral de cobertura basado en riesgo.
 - Análisis de dependencias en CI.
 

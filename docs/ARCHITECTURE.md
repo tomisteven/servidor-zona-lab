@@ -28,6 +28,7 @@ src/
 │   ├── auth/
 │   ├── catalog/
 │   ├── health/
+│   ├── notifications/
 │   ├── quotes/
 │   ├── settings/
 │   └── uploads/
@@ -41,14 +42,19 @@ src/
 
 ## Módulos
 
-| Módulo     | Responsabilidad                                                                  |
-| ---------- | -------------------------------------------------------------------------------- |
-| `health`   | Estado del proceso y de MongoDB.                                                 |
-| `catalog`  | Productos, categorías, tramos, opciones, serialización y CRUD administrativo.    |
-| `settings` | Portada y WhatsApp; configuración pública y administrativa.                      |
-| `quotes`   | Estimación, selecciones, pricing, pedidos, archivos privados y mensaje WhatsApp. |
-| `auth`     | Login, cookies, expiración, autorización y CSRF.                                 |
-| `uploads`  | Multer, validación por firma, sanitización y almacenamiento de archivos.         |
+| Módulo          | Responsabilidad                                                               |
+| --------------- | ----------------------------------------------------------------------------- |
+| `health`        | Estado del proceso y de MongoDB.                                              |
+| `catalog`       | Productos, categorías, tramos, opciones, serialización y CRUD administrativo. |
+| `settings`      | Portada y WhatsApp; configuración pública y administrativa.                   |
+| `quotes`        | Estimación, selecciones, pricing, pedidos, seguimiento, archivos y WhatsApp.  |
+| `auth`          | Login, cookies, expiración, autorización y CSRF.                              |
+| `uploads`       | Multer, validación por firma, optimización, sanitización y almacenamiento.    |
+| `notifications` | Emails de pedidos, cambios de estado, contacto y prueba SMTP.                 |
+| `contact`       | Formulario público de consultas con rate limit.                               |
+| `dashboard`     | Métricas agregadas para el panel.                                             |
+| `audit`         | Registro de mutaciones administrativas.                                       |
+| `reviews`       | Reseñas de producto, moderación y resumen de rating.                          |
 
 `quotes` consume lectura activa de `catalog` y resolución de WhatsApp de `settings`; no accede a detalles HTTP de esos módulos.
 
@@ -75,8 +81,8 @@ Request
 
 ### Product
 
-- `name`, `slug` único, `category`, `shortDescription`, `description`, `features`.
-- `imageUrl`, `active`, `minimumQuantity`, `personalizationFee`.
+- `name`, `slug` único, `category`, `shortDescription`, `seoTitle`, `seoDescription`, `description`, `features`.
+- `imageUrl` como portada, `imageAlt` como texto alternativo, `images` como galería (máximo 10), `active`, `minimumQuantity`, `personalizationFee`.
 - `priceTiers`: `minQuantity`, `maxQuantity`, `unitPrice`.
 - `optionGroups`: `name`, `required`, `choices` con `label` y `additionalUnitPrice`.
 - `deletedAt` para baja lógica.
@@ -84,14 +90,28 @@ Request
 ### QuoteRequest
 
 - `code`: `ZL-YYYYMMDD-<10 hex>`.
+- `status`: `new`, `contacted` o `closed`; `adminNotes` para seguimiento interno.
 - Snapshot de producto, cantidad, selecciones, notas y datos del cliente.
 - `pricing`: snapshot autoritativo con estado `estimated` o `custom`.
 - `logo` y `reference`: metadatos privados; nunca exponer la ruta física.
+- `marketing`: atribución UTM y referrer del pedido.
 - `whatsappNumber` y `whatsappUrl`.
 
 ### SiteSettings
 
-Documento único con `key: 'main'`: WhatsApp, portada, título y subtítulo. Si no existe, se devuelven valores por defecto sin crear el documento.
+Documento único con `key: 'main'`: WhatsApp, portada, título, subtítulo y configuración SMTP. La contraseña de aplicación se guarda cifrada. Si no existe, se devuelven valores por defecto sin crear el documento.
+
+### Review
+
+- `productId`, `productName` y `productSlug` como snapshot del producto.
+- `name`, `rating` (1 a 5), `comment` y `approved`.
+- Las reseñas nuevas se crean con `approved: false` y solo se publican tras moderación.
+
+## Datos personales
+
+- `POST /api/admin/quotes/:id/anonymize` elimina nombre, marca, contacto, observaciones, notas de diseño y archivos del pedido.
+- `DELETE /api/admin/quotes/:id` elimina el pedido y sus archivos de forma definitiva.
+- Ambas acciones requieren sesión administrativa y CSRF.
 
 ## Pricing
 
@@ -146,7 +166,10 @@ La estimación y el pedido ejecutan la misma lógica.
 ## Archivos
 
 - `storage/media`: imágenes públicas, servidas en `/uploads/media`.
+- Las variantes WebP de 480, 960 y 1600 px se generan desde `?w=<ancho>` y se cachean en la misma carpeta con sufijo `-<ancho>.webp`.
+- Con Cloudinary configurado, las imágenes se replican en la nube y `/uploads/media/...` redirige a `res.cloudinary.com`; la copia local queda como respaldo.
 - `storage/logos`: archivos privados de pedidos.
+- Las imágenes públicas sin referencias pueden eliminarse desde el panel o con `npm run media:cleanup -- --apply`; al borrar un original se eliminan sus variantes.
 - Multer en memoria.
 - Validación por firma binaria.
 - Nombres UUID.

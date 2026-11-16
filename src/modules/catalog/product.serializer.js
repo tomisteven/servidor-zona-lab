@@ -23,14 +23,32 @@ export function toProductSummary(product) {
     categoryLabel: CATEGORY_LABELS.get(product.category) ?? product.category,
     shortDescription: product.shortDescription,
     imageUrl: product.imageUrl ?? '',
+    imageAlt: product.imageAlt ?? '',
     minimumQuantity: product.minimumQuantity,
     startingUnitPrice: getStartingUnitPrice(product),
+    personalizationFee: product.personalizationFee ?? 0,
+    imageCount: getProductImages(product).length,
+    features: (product.features ?? []).slice(0, 3),
+    optionGroupCount: (product.optionGroups ?? []).length,
   };
+}
+
+function getProductImages(product) {
+  const images = (product.images ?? []).filter(Boolean);
+
+  if (images.length > 0) {
+    return images;
+  }
+
+  return product.imageUrl ? [product.imageUrl] : [];
 }
 
 export function toPublicProduct(product) {
   return {
     ...toProductSummary(product),
+    images: getProductImages(product),
+    seoTitle: product.seoTitle ?? '',
+    seoDescription: product.seoDescription ?? '',
     description: product.description ?? '',
     features: product.features ?? [],
     personalizationFee: product.personalizationFee,

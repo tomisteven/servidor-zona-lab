@@ -12,6 +12,7 @@ coverage/
 
 # Archivos subidos y almacenamiento persistente
 storage/
+backups/
 
 # Logs
 logs/

@@ -1,6 +1,6 @@
 import { rateLimit } from 'express-rate-limit';
 
-export function createRateLimiter({ windowMs, limit, message, enabled = true }) {
+export function createRateLimiter({ windowMs, limit, message, enabled = true, store = null }) {
   if (!enabled) {
     return (_request, _response, next) => next();
   }
@@ -8,6 +8,7 @@ export function createRateLimiter({ windowMs, limit, message, enabled = true }) 
   return rateLimit({
     windowMs,
     limit,
+    store: store ?? undefined,
     standardHeaders: 'draft-8',
     legacyHeaders: false,
     handler(request, response) {

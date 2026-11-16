@@ -7,15 +7,23 @@ import {
   quoteFileKindSchema,
   quoteListQuerySchema,
   quoteRequestInputSchema,
+  quoteUpdateSchema,
 } from './quote-request.schemas.js';
 
-export function createQuotesPublicRouter({ quoteService, upload, rateLimitEnabled = true }) {
+export function createQuotesPublicRouter({
+  quoteService,
+  notifier,
+  upload,
+  rateLimitEnabled = true,
+  rateLimitStoreFor = null,
+}) {
   const router = Router();
   const estimateLimiter = createRateLimiter({
     windowMs: 15 * 60 * 1000,
     limit: 120,
     message: 'Hiciste demasiadas consultas de precio. Esperá unos minutos y volvé a intentar.',
     enabled: rateLimitEnabled,
+    store: rateLimitStoreFor?.('quote-estimate'),
   });
   const createLimiter = createRateLimiter({
     windowMs: 60 * 60 * 1000,
@@ -23,6 +31,7 @@ export function createQuotesPublicRouter({ quoteService, upload, rateLimitEnable
     message:
       'Recibimos demasiados pedidos desde esta conexión. Esperá un tiempo o escribinos por WhatsApp.',
     enabled: rateLimitEnabled,
+    store: rateLimitStoreFor?.('quote-create'),
   });
 
   router.post('/estimate', estimateLimiter, async (request, response) => {
@@ -42,12 +51,13 @@ export function createQuotesPublicRouter({ quoteService, upload, rateLimitEnable
     });
 
     response.status(201).json(result);
+    void notifier?.notifyQuote({ quote: result, input });
   });
 
   return router;
 }
 
-export function createQuotesAdminRouter({ quoteService }) {
+export function createQuotesAdminRouter({ quoteService, notifier }) {
   const router = Router();
 
   router.get('/', async (request, response) => {
@@ -57,14 +67,49 @@ export function createQuotesAdminRouter({ quoteService }) {
     response.status(200).json(result);
   });
 
+  router.get('/export', async (request, response) => {
+    const query = validate(quoteListQuerySchema, request.query);
+    const csv = await quoteService.exportCsv(query);
+
+    response.set('Content-Type', 'text/csv; charset=utf-8');
+    response.set(
+      'Content-Disposition',
+      `attachment; filename="pedidos-${new Date().toISOString().slice(0, 10)}.csv"`,
+    );
+    response.send(csv);
+  });
+
+  router.delete('/:id', async (request, response) => {
+    await quoteService.remove(request.params.id);
+    response.status(204).end();
+  });
+
+  router.post('/:id/anonymize', async (request, response) => {
+    const result = await quoteService.anonymize(request.params.id);
+
+    response.status(200).json(result);
+  });
+
+  router.patch('/:id', async (request, response) => {
+    const input = validate(quoteUpdateSchema, request.body);
+    const result = await quoteService.update(request.params.id, input);
+
+    response.status(200).json({ quote: result.quote });
+
+    if (result.statusChanged) {
+      void notifier?.notifyStatusChange({ quote: result.quote });
+    }
+  });
+
   router.get('/:id/files/:kind', async (request, response, next) => {
     const kind = validate(quoteFileKindSchema, request.params.kind, {
       message: 'El archivo solicitado no es válido.',
     });
     const file = await quoteService.getFile(request.params.id, kind);
+    const inlineImageTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']);
+    const inline = request.query.inline === '1' && inlineImageTypes.has(file.mimeType);
 
-    response.set('Cache-Control', 'private, no-store');
-    response.download(file.filePath, file.downloadName, (error) => {
+    function handleFileError(error) {
       if (!error) {
         return;
       }
@@ -75,7 +120,21 @@ export function createQuotesAdminRouter({ quoteService }) {
       }
 
       request.log?.warn({ err: error }, 'quote_file_download_failed');
-    });
+    }
+
+    response.set('Cache-Control', 'private, no-store');
+
+    if (inline) {
+      response.type(file.mimeType);
+      response.set(
+        'Content-Disposition',
+        `inline; filename="${file.downloadName.replace(/["\r\n]/g, '')}"`,
+      );
+      response.sendFile(file.filePath, handleFileError);
+      return;
+    }
+
+    response.download(file.filePath, file.downloadName, handleFileError);
   });
 
   return router;

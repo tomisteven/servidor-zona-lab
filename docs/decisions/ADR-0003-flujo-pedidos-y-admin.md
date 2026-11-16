@@ -32,7 +32,7 @@ La base técnica no incluía funcionalidades de negocio. El requerimiento agrega
 - Seguridad: el frontend no decide precios ni autorización; CSRF, rate limiting y validación por firma reducen abuso. El SVG se inspecciona por patrones, no con un sanitizador dedicado.
 - Datos: los pedidos guardan snapshots para no cambiar cuando el producto se edite. La baja de productos es lógica.
 - Rendimiento: consultas paginadas y archivos servidos por Express. Si el volumen crece, evaluar almacenamiento de objetos y CDN.
-- Operación: MongoDB y `backend/storage` deben respaldarse de forma coordinada.
+- Operación: MongoDB y `storage/` deben respaldarse de forma coordinada.
 
 ## Revisión
 

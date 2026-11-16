@@ -4,6 +4,7 @@ import { validate } from '../../shared/http/validation.js';
 import {
   createProduct,
   deleteProduct,
+  exportProductsCsv,
   getProductForAdmin,
   listProducts,
   setProductActive,
@@ -23,6 +24,18 @@ export function createCatalogAdminRouter() {
     const result = await listProducts({ ...query, includeInactive: true });
 
     response.status(200).json(result);
+  });
+
+  router.get('/export', async (request, response) => {
+    const query = validate(adminProductQuerySchema, request.query);
+    const csv = await exportProductsCsv({ ...query, includeInactive: true });
+
+    response.set('Content-Type', 'text/csv; charset=utf-8');
+    response.set(
+      'Content-Disposition',
+      `attachment; filename="productos-${new Date().toISOString().slice(0, 10)}.csv"`,
+    );
+    response.send(csv);
   });
 
   router.post('/', async (request, response) => {

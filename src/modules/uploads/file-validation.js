@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { mkdir, unlink, writeFile } from 'node:fs/promises';
 
+import sharp from 'sharp';
+
 import { AppError } from '../../shared/errors/app-error.js';
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -23,6 +25,8 @@ const SVG_UNSAFE_PATTERNS = [
 ];
 
 export const MEDIA_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const OPTIMIZABLE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const MAX_IMAGE_DIMENSION = 2400;
 export const QUOTE_MIME_TYPES = new Set([
   'image/png',
   'image/jpeg',
@@ -99,11 +103,39 @@ export function sanitizeOriginalName(originalName) {
   return cleaned.slice(0, 180);
 }
 
+async function optimizeRasterImage(buffer, mimeType) {
+  if (!OPTIMIZABLE_MIME_TYPES.has(mimeType)) {
+    return null;
+  }
+
+  try {
+    const pipeline = sharp(buffer, { failOn: 'error' }).rotate().resize({
+      width: MAX_IMAGE_DIMENSION,
+      height: MAX_IMAGE_DIMENSION,
+      fit: 'inside',
+      withoutEnlargement: true,
+    });
+
+    if (mimeType === 'image/png') {
+      return await pipeline.png({ compressionLevel: 9, adaptiveFiltering: true }).toBuffer();
+    }
+
+    if (mimeType === 'image/webp') {
+      return await pipeline.webp({ quality: 82 }).toBuffer();
+    }
+
+    return await pipeline.jpeg({ quality: 82, mozjpeg: true }).toBuffer();
+  } catch {
+    return null;
+  }
+}
+
 export async function saveUploadedFile({
   file,
   directory,
   allowedMimeTypes,
   publicPathPrefix = null,
+  optimizeRaster = false,
 }) {
   if (!file?.buffer || typeof file.originalname !== 'string') {
     throw new AppError({
@@ -139,17 +171,22 @@ export async function saveUploadedFile({
     });
   }
 
+  const optimizedBuffer = optimizeRaster
+    ? await optimizeRasterImage(file.buffer, detected.mimeType)
+    : null;
+  const outputBuffer =
+    optimizedBuffer && optimizedBuffer.length < file.buffer.length ? optimizedBuffer : file.buffer;
   const storageKey = `${randomUUID()}.${detected.extension}`;
   const filePath = path.join(directory, storageKey);
 
   await mkdir(directory, { recursive: true });
-  await writeFile(filePath, file.buffer, { flag: 'wx', mode: 0o600 });
+  await writeFile(filePath, outputBuffer, { flag: 'wx', mode: 0o600 });
 
   return {
     storageKey,
     originalName: sanitizeOriginalName(file.originalname),
     mimeType: detected.mimeType,
-    sizeBytes: file.size,
+    sizeBytes: outputBuffer.length,
     url: publicPathPrefix ? `${publicPathPrefix}/${storageKey}` : null,
   };
 }

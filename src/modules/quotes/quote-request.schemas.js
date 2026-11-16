@@ -38,9 +38,22 @@ const customerSchema = z.object({
     .default(''),
 });
 
+const marketingSchema = z
+  .object({
+    source: z.string().trim().max(120).default(''),
+    medium: z.string().trim().max(120).default(''),
+    campaign: z.string().trim().max(120).default(''),
+    term: z.string().trim().max(120).default(''),
+    content: z.string().trim().max(120).default(''),
+    landingPage: z.string().trim().max(500).default(''),
+    referrer: z.string().trim().max(1000).default(''),
+  })
+  .optional();
+
 export const quoteEstimateSchema = estimateSchema;
 
 export const quoteRequestInputSchema = estimateSchema.extend({
+  marketing: marketingSchema,
   designNotes: z
     .string()
     .trim()
@@ -53,6 +66,20 @@ export const quoteListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).max(100000).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   search: z.string().trim().max(80).optional(),
+  status: z.enum(['new', 'contacted', 'closed']).optional(),
 });
+
+export const quoteUpdateSchema = z
+  .object({
+    status: z.enum(['new', 'contacted', 'closed']).optional(),
+    adminNotes: z
+      .string()
+      .trim()
+      .max(2000, 'Las notas internas admiten hasta 2000 caracteres.')
+      .optional(),
+  })
+  .refine((value) => value.status !== undefined || value.adminNotes !== undefined, {
+    message: 'Enviá al menos un cambio para actualizar el pedido.',
+  });
 
 export const quoteFileKindSchema = z.enum(['logo', 'reference']);

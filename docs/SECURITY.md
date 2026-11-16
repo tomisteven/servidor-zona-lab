@@ -43,12 +43,15 @@
 - Reglas de negocio en servicios.
 - No aceptar filtros u operadores Mongo arbitrarios.
 - Lista permitida de campos en actualizaciones.
+- Multipart de pedidos limitado a 20 KB por campo y a un único campo `payload`.
 
 ### Rate limiting
 
 - Login: 5 intentos cada 15 minutos por IP.
 - Estimación: 120 cada 15 minutos.
 - Pedidos: 20 por hora.
+- Contacto y reseñas: 10 por hora.
+- Sin `REDIS_URL` el contador es local; con `REDIS_URL` se comparte entre instancias y hace fallback a memoria si Redis falla.
 - Revisar comportamiento detrás de proxy.
 
 ### Archivos
@@ -61,18 +64,29 @@
 - Archivos de pedido hasta 10 MB.
 - Archivos privados fuera del estático.
 
+### Notificaciones por email
+
+- La contraseña de aplicación SMTP se guarda cifrada con AES-256-GCM.
+- La clave se deriva de `SESSION_SECRET`; rotarlo invalida la contraseña guardada.
+- La API nunca devuelve la contraseña, solo `hasSmtpAppPassword`.
+- El correo de prueba se limita a administradores autenticados y con CSRF.
+- Los avisos al comprador solo se envían si el pedido tiene correo y cambió el estado.
+- Los errores SMTP se registran en logs y se devuelven sin detalles internos.
+
 ### Secretos
 
 - `.env` fuera de Git.
 - `.env.example` sin secretos.
 - No imprimir valores sensibles.
 - Rotar secretos expuestos.
+- Las credenciales de Cloudinary se validan juntas o no se habilitan; el `API_SECRET` nunca se expone al frontend.
 
 ### Errores y logs
 
 - Errores internos sin stack trace.
 - Logs con redacción de cookies, autorización y `set-cookie`.
 - No registrar contraseñas, tokens ni datos personales innecesarios.
+- El panel permite anonimizar o eliminar pedidos y sus archivos para atender bajas de datos.
 - Query params excluidos de la ruta registrada.
 
 ## Riesgos y pendientes
@@ -94,6 +108,7 @@
 - [ ] Cookies correctas para la topología.
 - [ ] `TRUST_PROXY` correcto.
 - [ ] Admin configurado con hash y secreto fuertes.
+- [ ] SMTP configurado con contraseña de aplicación y correo de prueba verificado.
 - [ ] Rate limits revisados.
 - [ ] Volumen persistente y backups.
 - [ ] Logs sin secretos.

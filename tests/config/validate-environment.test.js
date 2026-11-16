@@ -20,6 +20,9 @@ test('aplica valores por defecto seguros para desarrollo', () => {
   assert.equal(environment.cookieSameSite, 'lax');
   assert.equal(environment.trustProxy, false);
   assert.equal(environment.adminEnabled, false);
+  assert.equal(environment.cloudinaryEnabled, false);
+  assert.equal(environment.cloudinaryFolder, 'zona-lab/media');
+  assert.equal(environment.redisUrl, null);
   assert.deepEqual(environment.corsOrigins, ['http://localhost:8080']);
 });
 
@@ -122,5 +125,46 @@ test('exige administrador en producción', () => {
         NODE_ENV: 'production',
       }),
     /son obligatorios en producción/,
+  );
+});
+
+test('configura Cloudinary solo con las tres credenciales', () => {
+  const environment = validateEnvironment({
+    ...MINIMUM_ENVIRONMENT,
+    CLOUDINARY_CLOUD_NAME: 'zona-lab',
+    CLOUDINARY_API_KEY: '123',
+    CLOUDINARY_API_SECRET: 'abc',
+  });
+
+  assert.equal(environment.cloudinaryEnabled, true);
+  assert.equal(environment.cloudinaryCloudName, 'zona-lab');
+  assert.equal(environment.cloudinaryFolder, 'zona-lab/media');
+});
+
+test('rechaza configuración parcial de Cloudinary', () => {
+  assert.throws(
+    () =>
+      validateEnvironment({
+        ...MINIMUM_ENVIRONMENT,
+        CLOUDINARY_CLOUD_NAME: 'zona-lab',
+      }),
+    /deben configurarse juntos/,
+  );
+});
+
+test('acepta una URL de Redis válida y rechaza esquemas inválidos', () => {
+  const environment = validateEnvironment({
+    ...MINIMUM_ENVIRONMENT,
+    REDIS_URL: 'rediss://default:secreto@redis.example.com:6379',
+  });
+
+  assert.equal(environment.redisUrl, 'rediss://default:secreto@redis.example.com:6379');
+  assert.throws(
+    () =>
+      validateEnvironment({
+        ...MINIMUM_ENVIRONMENT,
+        REDIS_URL: 'https://redis.example.com',
+      }),
+    /redis:\/\/ o rediss:\/\//,
   );
 });

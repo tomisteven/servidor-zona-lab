@@ -4,9 +4,11 @@
 
 Este repositorio contiene únicamente la API de Zona Lab: catálogo, cotizaciones, pedidos, archivos, configuración y panel administrativo. El frontend vive en otro repositorio y se despliega por separado.
 
-Stack: Node.js 24, Express 5, MongoDB/Mongoose 9, Zod, Multer, Pino, JavaScript con ES Modules.
+Stack: Node.js 24, Express 5, MongoDB/Mongoose 9, Zod, Multer, Nodemailer, Pino, JavaScript con ES Modules.
 
 No reintroducir el monorepo ni npm workspaces. Este proyecto debe funcionar de forma independiente con su propio `package.json`, lockfile, configuración y CI.
+
+No depender de rutas del repositorio frontend. Las imágenes de seed viven en `seeds/assets-bolsos`.
 
 ## Objetivo funcional
 
@@ -56,12 +58,16 @@ src/
 │   ├── database.js            # conexión MongoDB
 │   └── storage.js             # rutas de archivos
 ├── modules/
+│   ├── audit/                 # registro de mutaciones admin
 │   ├── auth/                  # login, sesión HMAC y CSRF
 │   ├── catalog/               # productos, categorías y CRUD admin
+│   ├── contact/               # formulario público de consultas
+│   ├── dashboard/             # métricas del panel
 │   ├── health/
+│   ├── notifications/         # pedidos, cambios de estado y contacto
 │   ├── quotes/                # pricing, pedidos, WhatsApp y archivos privados
-│   ├── settings/              # portada y WhatsApp
-│   └── uploads/               # Multer, validación y almacenamiento
+│   ├── settings/              # portada, WhatsApp y SMTP
+│   └── uploads/               # Multer, validación, optimización y almacenamiento
 ├── shared/
 │   ├── errors/
 │   ├── http/                  # errores, validación, rate limit
@@ -97,21 +103,26 @@ Request
 
 ## Módulos y responsabilidades
 
-| Módulo     | Responsabilidad                                                                  |
-| ---------- | -------------------------------------------------------------------------------- |
-| `health`   | Estado del proceso y de MongoDB.                                                 |
-| `catalog`  | Productos, categorías, tramos, opciones, serialización y CRUD administrativo.    |
-| `settings` | Portada y WhatsApp; configuración pública y administrativa.                      |
-| `quotes`   | Estimación, selecciones, pricing, pedidos, archivos privados y mensaje WhatsApp. |
-| `auth`     | Login, cookies, expiración, autorización y CSRF.                                 |
-| `uploads`  | Multer, validación por firma, sanitización y almacenamiento de archivos.         |
+| Módulo          | Responsabilidad                                                               |
+| --------------- | ----------------------------------------------------------------------------- |
+| `health`        | Estado del proceso y de MongoDB.                                              |
+| `catalog`       | Productos, categorías, tramos, opciones, serialización y CRUD administrativo. |
+| `settings`      | Portada y WhatsApp; configuración pública y administrativa.                   |
+| `quotes`        | Estimación, selecciones, pricing, pedidos, seguimiento, archivos y WhatsApp.  |
+| `auth`          | Login, cookies, expiración, autorización y CSRF.                              |
+| `uploads`       | Multer, validación por firma, optimización, sanitización y almacenamiento.    |
+| `notifications` | Emails de pedidos, cambios de estado, contacto y prueba SMTP.                 |
+| `contact`       | Formulario público de consultas con rate limit.                               |
+| `dashboard`     | Métricas agregadas para el panel.                                             |
+| `audit`         | Registro de mutaciones administrativas.                                       |
+| `reviews`       | Reseñas de producto, moderación y resumen de rating.                          |
 
 ## Modelo de datos
 
 ### Product
 
-- `name`, `slug` único, `category`, `shortDescription`, `description`, `features`.
-- `imageUrl`, `active`, `minimumQuantity`, `personalizationFee`.
+- `name`, `slug` único, `category`, `shortDescription`, `seoTitle`, `seoDescription`, `description`, `features`.
+- `imageUrl` como portada, `images` como galería (máximo 10), `active`, `minimumQuantity`, `personalizationFee`.
 - `priceTiers`: `minQuantity`, `maxQuantity`, `unitPrice`.
 - `optionGroups`: `name`, `required`, `choices` con `label` y `additionalUnitPrice`.
 - `deletedAt` para baja lógica.
@@ -130,6 +141,7 @@ Reglas:
 - Snapshot de producto, cantidad, selecciones, notas y datos del cliente.
 - `pricing`: snapshot autoritativo con estado `estimated` o `custom`.
 - `logo` y `reference`: metadatos privados; nunca exponer la ruta física.
+- `marketing`: atribución UTM y referrer del pedido.
 - `whatsappNumber` y `whatsappUrl`.
 - Los snapshots evitan que un pedido cambie cuando se edita el producto.
 
@@ -184,6 +196,8 @@ La estimación y la creación del pedido deben ejecutar la misma lógica.
 ## Archivos
 
 - `storage/media`: imágenes públicas, servidas en `/uploads/media`.
+- Las variantes WebP de 480, 960 y 1600 px se generan desde `?w=<ancho>` y se cachean con sufijo `-<ancho>.webp`.
+- Con Cloudinary configurado, `storage/media` se replica en la nube y se sirve por redirect; el original local queda como respaldo.
 - `storage/logos`: archivos privados de pedidos.
 - Multer en memoria; validar por firma binaria, no solo por MIME declarado.
 - Nombres UUID y extensión segura.
@@ -201,6 +215,7 @@ Variables principales:
 NODE_ENV=development
 PORT=5050
 MONGODB_URI=mongodb://127.0.0.1:27017/zona_lab_dev
+REDIS_URL=
 CORS_ORIGINS=http://localhost:8080
 LOG_LEVEL=info
 WHATSAPP_NUMBER=5491112345678
@@ -234,6 +249,12 @@ npm run format
 npm run format:check
 npm run verify
 npm run admin:hash -- "contraseña de al menos 12 caracteres"
+npm run media:cleanup
+npm run media:cleanup -- --apply
+npm run media:optimize
+npm run media:optimize -- --apply
+npm run seed:products
+npm run backup
 ```
 
 Puertos locales: API `5050`, frontend `8080`.
@@ -280,6 +301,7 @@ Mantener actualizado:
 - `docs/API_CONVENTIONS.md`: convenciones para evolución de contratos.
 - `docs/ARCHITECTURE.md`: módulos, flujos y modelo de datos.
 - `docs/ENVIRONMENT.md`: variables y configuración.
+- `docs/OPERATIONS.md`: backups, restore y monitoreo.
 - `docs/DEPLOYMENT.md`: operación y despliegue.
 - `docs/SECURITY.md`: controles y pendientes.
 - `docs/TESTING.md`: estrategia y comandos.
@@ -300,6 +322,6 @@ Mantener actualizado:
 - Sin recuperación de contraseña ni revocación individual de sesiones.
 - Sin envío automático de archivos por WhatsApp.
 - Sin pagos, stock, envíos ni facturación.
-- Sin trabajos en segundo plano, caché distribuida ni almacenamiento de objetos.
+- Sin trabajos en segundo plano ni caché distribuida. Las imágenes pueden delegarse a Cloudinary; hay rate limit compartido con Redis opcional.
 - Sin migraciones formales; los cambios de esquema deben ser compatibles o documentarse en un ADR.
 - Sin E2E automatizado entre navegador real y backend.

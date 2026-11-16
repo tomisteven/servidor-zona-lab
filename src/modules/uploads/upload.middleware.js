@@ -5,6 +5,7 @@ import { MEDIA_MIME_TYPES, QUOTE_MIME_TYPES } from './file-validation.js';
 
 const MEDIA_MAX_BYTES = 8 * 1024 * 1024;
 const QUOTE_MAX_BYTES = 10 * 1024 * 1024;
+const QUOTE_PAYLOAD_MAX_BYTES = 20 * 1024;
 
 export function createUploadMiddleware(kind) {
   const isQuote = kind === 'quote';
@@ -15,6 +16,7 @@ export function createUploadMiddleware(kind) {
     limits: {
       fileSize: isQuote ? QUOTE_MAX_BYTES : MEDIA_MAX_BYTES,
       files: isQuote ? 2 : 1,
+      ...(isQuote ? { fields: 1, fieldSize: QUOTE_PAYLOAD_MAX_BYTES } : { fields: 0 }),
     },
     fileFilter(_req, file, callback) {
       if (!allowedMimeTypes.has(file.mimetype)) {

@@ -16,7 +16,14 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "verify": "npm run lint && npm test",
-    "admin:hash": "node scripts/hash-password.js"
+    "admin:hash": "node scripts/hash-password.js",
+    "media:cleanup": "node scripts/cleanup-media.js",
+    "media:optimize": "node scripts/optimize-media.js",
+    "media:migrate-cloudinary": "node scripts/migrate-media-cloudinary.js",
+    "cloudinary:check": "node scripts/check-cloudinary.js",
+    "cloudinary:sync": "node scripts/sync-cloudinary-manifest.js",
+    "seed:products": "node scripts/seed-products.js",
+    "backup": "node scripts/backup.js"
   },
   "dependencies": {
     "cors": "^2.8.6",
@@ -26,8 +33,11 @@
     "helmet": "^8.3.0",
     "mongoose": "^9.11.3",
     "multer": "^2.5.0",
+    "nodemailer": "^10.5.0",
     "pino": "^10.4.0",
     "pino-http": "^11.0.0",
+    "redis": "^6.3.1",
+    "sharp": "^0.35.5",
     "zod": "^4.6.7"
   },
   "devDependencies": {

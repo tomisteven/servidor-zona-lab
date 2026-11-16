@@ -35,6 +35,20 @@ const pricingSchema = new mongoose.Schema(
     estimatedTotal: { type: Number, default: null },
     currency: { type: String, default: 'ARS' },
     computedAt: { type: Date, required: true },
+    customReason: { type: String, default: null, maxlength: 240 },
+  },
+  { _id: false },
+);
+
+const marketingSchema = new mongoose.Schema(
+  {
+    source: { type: String, default: '', trim: true, maxlength: 120 },
+    medium: { type: String, default: '', trim: true, maxlength: 120 },
+    campaign: { type: String, default: '', trim: true, maxlength: 120 },
+    term: { type: String, default: '', trim: true, maxlength: 120 },
+    content: { type: String, default: '', trim: true, maxlength: 120 },
+    landingPage: { type: String, default: '', trim: true, maxlength: 500 },
+    referrer: { type: String, default: '', trim: true, maxlength: 1000 },
   },
   { _id: false },
 );
@@ -63,6 +77,8 @@ const productSnapshotSchema = new mongoose.Schema(
 const quoteRequestSchema = new mongoose.Schema(
   {
     code: { type: String, required: true, trim: true, uppercase: true, maxlength: 40 },
+    status: { type: String, enum: ['new', 'contacted', 'closed'], default: 'new' },
+    adminNotes: { type: String, default: '', trim: true, maxlength: 2000 },
     product: { type: productSnapshotSchema, required: true },
     quantity: { type: Number, required: true, min: 1, max: 1000000 },
     selections: { type: [selectionSchema], default: [] },
@@ -71,6 +87,7 @@ const quoteRequestSchema = new mongoose.Schema(
     reference: { type: fileSchema, default: null },
     pricing: { type: pricingSchema, required: true },
     customer: { type: customerSchema, required: true },
+    marketing: { type: marketingSchema, default: () => ({}) },
     whatsappNumber: { type: String, required: true, maxlength: 15 },
     whatsappUrl: { type: String, required: true, maxlength: 20000 },
   },

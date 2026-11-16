@@ -1,8 +1,8 @@
 # Zona Lab · Backend
 
-API de Zona Lab: catálogo, cotizaciones, pedidos, archivos y panel administrativo. Node.js + Express 5, MongoDB/Mongoose y JavaScript.
+API de Zona Lab: catálogo, cotizaciones, pedidos, archivos, notificaciones y panel administrativo. Node.js + Express 5, MongoDB/Mongoose, Nodemailer y JavaScript.
 
-Este repositorio contiene únicamente el backend. El frontend vive en un repositorio y despliegue independiente.
+Este repositorio contiene únicamente el backend. El frontend vive en un repositorio y despliegue independiente. El backend es autocontenido: incluye sus propias imágenes de seed en `seeds/assets-bolsos` y no necesita acceder al repositorio del frontend para instalar, probar o desplegar.
 
 ## Requisitos
 
@@ -57,6 +57,12 @@ SESSION_SECRET=
 
 En producción, las tres variables admin son obligatorias.
 
+## Notificaciones por email
+
+Se configuran desde **Panel → Configuración → Notificaciones por email**: correo de destino, servidor SMTP, puerto, usuario y contraseña de aplicación. La contraseña se guarda cifrada con `SESSION_SECRET` y nunca se devuelve por la API. El panel incluye un botón para enviar un correo de prueba.
+
+Con las notificaciones activas, el administrador recibe un email por pedido nuevo y el comprador recibe un aviso cada vez que cambia el estado de su pedido (si dejó un correo).
+
 ## Panel administrativo
 
 ```bash
@@ -81,17 +87,26 @@ npm run dev
 
 ## Scripts
 
-| Comando                | Descripción                            |
-| ---------------------- | -------------------------------------- |
-| `npm run dev`          | Ejecuta Node con recarga automática.   |
-| `npm start`            | Ejecuta el servidor.                   |
-| `npm test`             | Pruebas con `node:test`.               |
-| `npm run test:watch`   | Pruebas en modo watch.                 |
-| `npm run lint`         | ESLint.                                |
-| `npm run format`       | Formatea con Prettier.                 |
-| `npm run format:check` | Verifica formato.                      |
-| `npm run verify`       | Lint y pruebas.                        |
-| `npm run admin:hash`   | Genera el hash de la contraseña admin. |
+| Comando                             | Descripción                                                     |
+| ----------------------------------- | --------------------------------------------------------------- |
+| `npm run dev`                       | Ejecuta Node con recarga automática.                            |
+| `npm start`                         | Ejecuta el servidor.                                            |
+| `npm test`                          | Pruebas con `node:test`.                                        |
+| `npm run test:watch`                | Pruebas en modo watch.                                          |
+| `npm run lint`                      | ESLint.                                                         |
+| `npm run format`                    | Formatea con Prettier.                                          |
+| `npm run format:check`              | Verifica formato.                                               |
+| `npm run verify`                    | Lint y pruebas.                                                 |
+| `npm run admin:hash`                | Genera el hash de la contraseña admin.                          |
+| `npm run media:cleanup`             | Lista media sin referencias (simulación).                       |
+| `npm run media:cleanup -- --apply`  | Elimina media sin referencias.                                  |
+| `npm run media:optimize`            | Simula optimización de imágenes (`--apply` para escribir).      |
+| `npm run media:optimize -- --apply` | Optimiza imágenes en `storage/media`.                           |
+| `npm run media:migrate-cloudinary`  | Simula la subida de imágenes a Cloudinary (`--apply` ejecuta).  |
+| `npm run cloudinary:check`          | Valida las credenciales de Cloudinary sin subir archivos.       |
+| `npm run cloudinary:sync`           | Reconstruye el manifiesto desde las imágenes en Cloudinary.     |
+| `npm run seed:products`             | Crea/actualiza 10 productos de prueba con las imágenes locales. |
+| `npm run backup`                    | Genera un backup lógico de MongoDB y `storage/`.                |
 
 No hay etapa de build: Node ejecuta directamente los módulos ES.
 
@@ -103,6 +118,8 @@ Rutas públicas:
 - `GET /api/catalog/categories`, `GET /api/catalog/products`, `GET /api/catalog/products/:slug`
 - `GET /api/settings/public`
 - `POST /api/quotes/estimate`, `POST /api/quotes`
+- `POST /api/contact`
+- `GET /api/catalog/products/:id/reviews`, `POST /api/catalog/products/:id/reviews`
 
 Rutas administrativas:
 
@@ -111,6 +128,11 @@ Rutas administrativas:
 - `/api/admin/quotes*`
 - `/api/admin/settings`
 - `/api/admin/uploads/media`
+- `/api/admin/dashboard`
+- `/api/admin/audit`
+- `/api/admin/reviews`
+- `/api/admin/quotes/export`, `/api/admin/products/export`
+- `GET /api/admin/uploads/media`
 
 Los precios siempre se calculan en el servidor. El frontend no define precios ni totales.
 
@@ -119,7 +141,7 @@ Los precios siempre se calculan en el servidor. El frontend no define precios ni
 - `storage/media`: imágenes públicas, servidas en `/uploads/media`.
 - `storage/logos`: archivos privados de pedidos.
 
-En producción, montar un volumen persistente y respaldar ambos directorios. Los archivos no se guardan en Git.
+En producción, montar un volumen persistente y respaldar ambos directorios. Los archivos no se guardan en Git. Las imágenes públicas sin referencias pueden limpiarse con `npm run media:cleanup -- --apply`. Con Cloudinary configurado, las imágenes se replican en la nube y se sirven desde ahí; la copia local queda como respaldo.
 
 ## Despliegue
 
@@ -139,17 +161,23 @@ Con `COOKIE_SAME_SITE=none`, las cookies requieren HTTPS y el frontend debe envi
 src/
 ├── config/              # entorno, MongoDB y almacenamiento
 ├── modules/
+│   ├── audit/           # auditoría de mutaciones admin
 │   ├── auth/            # sesión admin y CSRF
 │   ├── catalog/         # productos y categorías
+│   ├── contact/         # formulario público de consultas
+│   ├── dashboard/       # métricas del panel
 │   ├── health/
+│   ├── notifications/   # emails de pedidos, estado y contacto
 │   ├── quotes/          # pricing, pedidos y WhatsApp
-│   ├── settings/        # portada y WhatsApp
-│   └── uploads/         # archivos públicos y privados
+│   ├── settings/        # portada, WhatsApp y SMTP
+│   └── uploads/         # archivos públicos, privados y optimización
 ├── shared/
 ├── app.js
 └── server.js
 tests/
 scripts/
+seeds/
+└── assets-bolsos/       # imágenes locales para npm run seed:products
 ```
 
 ## Documentación
@@ -158,6 +186,7 @@ scripts/
 - [Arquitectura](docs/ARCHITECTURE.md).
 - [API](docs/API.md) y [convenciones](docs/API_CONVENTIONS.md).
 - [Entorno](docs/ENVIRONMENT.md).
+- [Operación y backups](docs/OPERATIONS.md).
 - [Despliegue](docs/DEPLOYMENT.md).
 - [Seguridad](docs/SECURITY.md).
 - [Testing](docs/TESTING.md).

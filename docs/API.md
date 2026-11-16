@@ -1,5 +1,7 @@
 # Contratos de API
 
+> Este documento es la fuente de verdad del contrato. El repositorio frontend mantiene una copia sincronizada; cualquier cambio debe aplicarse en ambos.
+
 Base URL local: `http://localhost:5050/api`
 
 Todas las respuestas incluyen `x-request-id`. Las rutas administrativas requieren sesión y, en mutaciones, CSRF.
@@ -51,12 +53,13 @@ Lista productos activos y no eliminados.
 
 Query params:
 
-| Parámetro  | Tipo   | Default | Límites             |
-| ---------- | ------ | ------- | ------------------- |
-| `page`     | entero | `1`     | `1..100000`         |
-| `limit`    | entero | `12`    | `1..24`             |
-| `category` | enum   | —       | Categoría válida    |
-| `search`   | string | —       | Hasta 80 caracteres |
+| Parámetro  | Tipo   | Default  | Límites                    |
+| ---------- | ------ | -------- | -------------------------- |
+| `page`     | entero | `1`      | `1..100000`                |
+| `limit`    | entero | `12`     | `1..24`                    |
+| `category` | enum   | —        | Categoría válida           |
+| `search`   | string | —        | Hasta 80 caracteres        |
+| `sort`     | enum   | `newest` | `newest`, `oldest`, `name` |
 
 Respuesta:
 
@@ -71,6 +74,7 @@ Respuesta:
       "categoryLabel": "Bolsos",
       "shortDescription": "Bolso personalizado",
       "imageUrl": "/uploads/media/archivo.webp",
+      "imageAlt": "Bolso personalizado con logo",
       "minimumQuantity": 10,
       "startingUnitPrice": 12500
     }
@@ -97,7 +101,10 @@ Devuelve el detalle público de un producto activo.
     "category": "bolsos",
     "categoryLabel": "Bolsos",
     "shortDescription": "Bolso personalizado",
+    "seoTitle": "Bolso urbano personalizado",
+    "seoDescription": "Bolso urbano personalizado con logo y producción por cantidad.",
     "imageUrl": "",
+    "images": ["/uploads/media/archivo.webp", "/uploads/media/archivo-2.webp"],
     "minimumQuantity": 10,
     "startingUnitPrice": 12500,
     "description": "Descripción completa",
@@ -200,11 +207,11 @@ Registra un pedido. Límite: 20 solicitudes por hora por IP. Formato `multipart/
 
 Campos:
 
-| Campo       | Tipo | Obligatorio | Límite                                |
-| ----------- | ---- | ----------- | ------------------------------------- |
-| `payload`   | JSON | Sí          | Mismo contrato del estimate + cliente |
-| `logo`      | file | No          | PNG/JPG/WEBP/SVG/PDF, hasta 10 MB     |
-| `reference` | file | No          | PNG/JPG/WEBP/SVG/PDF, hasta 10 MB     |
+| Campo       | Tipo | Obligatorio | Límite                                       |
+| ----------- | ---- | ----------- | -------------------------------------------- |
+| `payload`   | JSON | Sí          | Mismo contrato del estimate + cliente; 20 KB |
+| `logo`      | file | No          | PNG/JPG/WEBP/SVG/PDF, hasta 10 MB            |
+| `reference` | file | No          | PNG/JPG/WEBP/SVG/PDF, hasta 10 MB            |
 
 El JSON de `payload` agrega:
 
@@ -217,11 +224,20 @@ El JSON de `payload` agrega:
     "phone": "+54 9 11 1234 5678",
     "email": "ana@example.com",
     "observations": "Entregar en octubre"
+  },
+  "marketing": {
+    "source": "google",
+    "medium": "cpc",
+    "campaign": "padel-bolsos",
+    "term": "",
+    "content": "",
+    "landingPage": "/catalogo/bolsos?utm_source=google",
+    "referrer": ""
   }
 }
 ```
 
-`designNotes` admite hasta 2000 caracteres; `observations`, hasta 1000. El teléfono debe tener entre 6 y 15 dígitos.
+`designNotes` admite hasta 2000 caracteres; `observations`, hasta 1000. El teléfono debe tener entre 6 y 15 dígitos. `marketing` es opcional y guarda la atribución de campaña.
 
 Respuesta `201`:
 
@@ -242,7 +258,24 @@ Respuesta `201`:
 
 Los archivos privados no se adjuntan automáticamente: el mensaje de WhatsApp indica que deben enviarse manualmente.
 
-Códigos de error frecuentes: `VALIDATION_ERROR`, `FILE_REQUIRED`, `UNSUPPORTED_FILE_TYPE`, `UNSAFE_FILE`, `FILE_TOO_LARGE`, `RATE_LIMITED`, `WHATSAPP_NOT_CONFIGURED`.
+Códigos de error frecuentes: `VALIDATION_ERROR`, `FILE_REQUIRED`, `UNSUPPORTED_FILE_TYPE`, `UNSAFE_FILE`, `FILE_TOO_LARGE`, `FIELD_TOO_LARGE`, `RATE_LIMITED`, `WHATSAPP_NOT_CONFIGURED`.
+
+## Contacto
+
+### POST /api/contact
+
+Formulario público de consultas. Límite: 10 solicitudes por hora por IP.
+
+```json
+{
+  "name": "Ana Pérez",
+  "email": "ana@example.com",
+  "phone": "+54 9 11 1234 5678",
+  "message": "Quiero cotizar 50 mochilas personalizadas."
+}
+```
+
+Responde `201` con `{ "sent": true }`. Si SMTP no está configurado: `503 CONTACT_UNAVAILABLE`.
 
 ## Autenticación administrativa
 
@@ -274,6 +307,48 @@ Requiere sesión. Devuelve usuario, CSRF y expiración. `401 AUTH_REQUIRED` si n
 
 Requiere sesión y header `x-csrf-token`. Responde `204` y limpia las cookies.
 
+## Reseñas
+
+### GET /api/catalog/products/:id/reviews
+
+Devuelve reseñas aprobadas y resumen (`count`, `average`).
+
+### POST /api/catalog/products/:id/reviews
+
+Crea una reseña pendiente de moderación. Límite: 10 por hora por IP.
+
+```json
+{
+  "name": "Ana",
+  "rating": 5,
+  "comment": "Excelente calidad y atención."
+}
+```
+
+### GET /api/admin/reviews?status=pending|approved|all
+
+Lista reseñas para moderación.
+
+### PATCH /api/admin/reviews/:id
+
+```json
+{ "approved": true }
+```
+
+### DELETE /api/admin/reviews/:id
+
+Elimina una reseña. Responde `204`.
+
+## Dashboard y auditoría
+
+### GET /api/admin/dashboard
+
+Devuelve métricas de productos, pedidos por estado, valor estimado, pedidos recientes y productos más pedidos.
+
+### GET /api/admin/audit
+
+Lista mutaciones administrativas con `page` y `limit` (máximo 100). Cada entrada incluye acción, método, ruta, usuario, estado HTTP, request id y fecha.
+
 ## Administración
 
 Todas las rutas siguientes requieren `zl_admin_session`. Los métodos `POST`, `PUT`, `PATCH` y `DELETE` requieren además `x-csrf-token` con el valor de la cookie `zl_admin_csrf`. Las respuestas llevan `Cache-Control: no-store`.
@@ -289,7 +364,9 @@ Todas las rutas siguientes requieren `zl_admin_session`. Los métodos `POST`, `P
 | `PATCH`  | `/api/admin/products/:id/status` | Activa o desactiva: `{ "active": true }`.   |
 | `DELETE` | `/api/admin/products/:id`        | Baja lógica: desactiva y marca `deletedAt`. |
 
-`GET /api/admin/products` acepta `page`, `limit` (máximo 100), `category` y `search`.
+`GET /api/admin/products` acepta `page`, `limit` (máximo 100), `category`, `search` y `sort` (`newest`, `oldest`, `name`).
+
+`GET /api/admin/products/export` exporta el catálogo a CSV con los mismos filtros.
 
 Payload de creación/edición:
 
@@ -299,9 +376,17 @@ Payload de creación/edición:
   "slug": "bolso-urbano",
   "category": "bolsos",
   "shortDescription": "Bolso personalizado",
+  "seoTitle": "Bolso urbano personalizado",
+  "seoDescription": "Bolso urbano personalizado con logo, producción por cantidad y cotización online.",
   "description": "Descripción completa",
   "features": ["Material resistente"],
   "imageUrl": "/uploads/media/archivo.webp",
+  "imageAlt": "Bolso deportivo personalizado con logo bordado",
+  "images": [
+    "/uploads/media/archivo.webp",
+    "/uploads/media/archivo-2.webp",
+    "/uploads/media/archivo-3.webp"
+  ],
   "active": true,
   "minimumQuantity": 10,
   "personalizationFee": 5000,
@@ -316,7 +401,7 @@ Payload de creación/edición:
 }
 ```
 
-Reglas: el slug es opcional al crear (se genera desde el nombre) y único; los tramos no pueden superponerse y solo el último puede quedar abierto; cada grupo necesita al menos una opción y los nombres/labels no se repiten dentro de su alcance.
+Reglas: el slug es opcional al crear (se genera desde el nombre) y único; los tramos no pueden superponerse y solo el último puede quedar abierto; cada grupo necesita al menos una opción y los nombres/labels no se repiten dentro de su alcance. `imageUrl` es la portada y `images` la galería (máximo 10; si se omite, se usa `imageUrl`).
 
 Códigos: `VALIDATION_ERROR`, `PRODUCT_NOT_FOUND`, `SLUG_TAKEN`.
 
@@ -324,7 +409,7 @@ Códigos: `VALIDATION_ERROR`, `PRODUCT_NOT_FOUND`, `SLUG_TAKEN`.
 
 ### GET /api/admin/quotes
 
-Query params: `page` (default `1`), `limit` (default `20`, máximo `100`), `search` (código, cliente, teléfono o producto).
+Query params: `page` (default `1`), `limit` (default `20`, máximo `100`), `search` (código, cliente, teléfono o producto) y `status` (`new`, `contacted` o `closed`).
 
 ```json
 {
@@ -332,7 +417,10 @@ Query params: `page` (default `1`), `limit` (default `20`, máximo `100`), `sear
     {
       "id": "665f...",
       "code": "ZL-20261022-ABCDEF1234",
+      "status": "new",
+      "adminNotes": "",
       "createdAt": "2026-10-22T12:00:00.000Z",
+      "updatedAt": "2026-10-22T12:00:00.000Z",
       "product": {
         "id": "665f...",
         "name": "Bolso urbano",
@@ -349,7 +437,27 @@ Query params: `page` (default `1`), `limit` (default `20`, máximo `100`), `sear
         "email": "",
         "observations": ""
       },
-      "pricing": { "status": "estimated", "estimatedTotal": 255000, "currency": "ARS" },
+      "marketing": {
+        "source": "google",
+        "medium": "cpc",
+        "campaign": "padel-bolsos",
+        "term": "",
+        "content": "",
+        "landingPage": "/catalogo/bolsos?utm_source=google",
+        "referrer": ""
+      },
+      "pricing": {
+        "status": "estimated",
+        "tier": { "minQuantity": 10, "maxQuantity": 49 },
+        "unitBasePrice": 12500,
+        "optionsUnitTotal": 0,
+        "unitPrice": 12500,
+        "personalizationFee": 5000,
+        "estimatedTotal": 255000,
+        "currency": "ARS",
+        "computedAt": "2026-10-22T12:00:00.000Z",
+        "customReason": null
+      },
       "files": {
         "logo": {
           "originalName": "logo.png",
@@ -366,25 +474,67 @@ Query params: `page` (default `1`), `limit` (default `20`, máximo `100`), `sear
 }
 ```
 
+Si el pedido quedó como `custom`, `pricing.customReason` explica el motivo para el panel.
+
+### PATCH /api/admin/quotes/:id
+
+Actualiza el seguimiento interno. Requiere `x-csrf-token`.
+
+```json
+{
+  "status": "contacted",
+  "adminNotes": "Llamar mañana para confirmar el diseño."
+}
+```
+
+`status` acepta `new`, `contacted` o `closed`; `adminNotes` admite hasta 2000 caracteres. Responde `200` con `{ "quote": { ... } }`. Códigos: `QUOTE_NOT_FOUND`, `VALIDATION_ERROR`.
+
+Si `status` cambia y el pedido tiene `customer.email`, se envía un aviso al comprador con la configuración SMTP del sitio. Cambiar solo `adminNotes` no envía correo.
+
+### GET /api/admin/quotes/export
+
+Exporta pedidos a CSV con los filtros `search` y `status`.
+
+### POST /api/admin/quotes/:id/anonymize
+
+Elimina datos personales, notas y archivos del pedido, conservando métricas y pricing. Responde `200` con el pedido anonimizado.
+
+### DELETE /api/admin/quotes/:id
+
+Elimina definitivamente el pedido y sus archivos. Responde `204`.
+
 ### GET /api/admin/quotes/:id/files/:kind
 
-Descarga un archivo privado. `kind` es `logo` o `reference`. Responde con `Content-Disposition: attachment` y `Cache-Control: private, no-store`. Códigos: `QUOTE_NOT_FOUND`, `FILE_NOT_FOUND`.
+Descarga un archivo privado. `kind` es `logo` o `reference`. Responde con `Content-Disposition: attachment` y `Cache-Control: private, no-store`. Con `?inline=1` sirve imágenes (PNG/JPG/WEBP/SVG) con `Content-Disposition: inline` para vistas previas autenticadas. Códigos: `QUOTE_NOT_FOUND`, `FILE_NOT_FOUND`.
 
 ## Configuración
 
-| Método | Ruta                  | Descripción                                   |
-| ------ | --------------------- | --------------------------------------------- |
-| `GET`  | `/api/admin/settings` | Obtiene la configuración actual.              |
-| `PUT`  | `/api/admin/settings` | Guarda WhatsApp, portada, título y subtítulo. |
+| Método | Ruta                             | Descripción                                              |
+| ------ | -------------------------------- | -------------------------------------------------------- |
+| `GET`  | `/api/admin/settings`            | Obtiene la configuración actual.                         |
+| `PUT`  | `/api/admin/settings`            | Guarda portada, WhatsApp y notificaciones por email.     |
+| `POST` | `/api/admin/settings/test-email` | Envía un correo de prueba con la configuración guardada. |
 
 ```json
 {
   "whatsappNumber": "+54 9 11 1234 5678",
   "heroTitle": "Título",
   "heroSubtitle": "Subtítulo",
-  "heroImageUrl": "/uploads/media/archivo.webp"
+  "heroImageUrl": "/uploads/media/archivo.webp",
+  "emailNotificationsEnabled": true,
+  "notificationEmail": "pedidos@example.com",
+  "smtpHost": "smtp.gmail.com",
+  "smtpPort": 587,
+  "smtpSecure": false,
+  "smtpUser": "cuenta@gmail.com",
+  "smtpAppPassword": "contraseña-de-aplicación",
+  "clearSmtpAppPassword": false
 }
 ```
+
+`GET` devuelve `hasSmtpAppPassword` y nunca la contraseña. La contraseña se cifra con `SESSION_SECRET`; si se rota el secreto, debe cargarse de nuevo desde el panel. `POST /test-email` responde `{ "sent": true }` o `EMAIL_NOT_CONFIGURED` (400) / `EMAIL_SEND_FAILED` (502).
+
+La misma configuración SMTP se usa para avisar al administrador de pedidos nuevos y al comprador cuando cambia el estado del pedido.
 
 ## Uploads de media
 
@@ -398,12 +548,33 @@ Descarga un archivo privado. `kind` es `logo` o `reference`. Responde con `Conte
     "url": "/uploads/media/archivo.webp",
     "originalName": "portada.webp",
     "mimeType": "image/webp",
-    "sizeBytes": 2048
+    "sizeBytes": 2048,
+    "variants": [
+      { "width": 480, "url": "/uploads/media/archivo.webp?w=480" },
+      { "width": 960, "url": "/uploads/media/archivo.webp?w=960" },
+      { "width": 1600, "url": "/uploads/media/archivo.webp?w=1600" }
+    ]
   }
 }
 ```
 
 El resultado se usa como `imageUrl` de producto o `heroImageUrl`. Los archivos se sirven en `/uploads/media/<archivo>` con cache inmutable de 7 días. Si el frontend está en otro dominio, resuelve esa ruta contra `VITE_MEDIA_BASE_URL` o contra el origen de `VITE_API_BASE_URL`.
+
+Si `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY` y `CLOUDINARY_API_SECRET` están configurados, la imagen también se sube a Cloudinary y `/uploads/media/<archivo>` responde `301` hacia `res.cloudinary.com` con `q_auto,f_auto`. Si la copia en la nube no existe o falla, se sirve la copia local.
+
+### GET /api/admin/uploads/media
+
+Lista la biblioteca de imágenes. Acepta `page`, `limit` (máximo 100) y `search` por nombre. Cada ítem incluye `url`, `width`, `height`, `sizeBytes`, `mimeType`, `createdAt`, `inUse` y `variants`.
+
+### Variantes responsive
+
+Los originales se sirven con `?w=480`, `?w=960` o `?w=1600`. La variante se genera en la primera solicitud y queda cacheada; si la imagen no se puede procesar, se sirve el original. Internamente las variantes locales se guardan como `<archivo>-<ancho>.webp`, pero la URL pública siempre usa `?w=<ancho>`.
+
+### DELETE /api/admin/uploads/media/:file
+
+Elimina una imagen pública y sus variantes si ya no está referenciada por un producto (portada o galería) ni por la portada del sitio. Responde `204`. Códigos: `INVALID_MEDIA_FILE`, `FILE_NOT_FOUND`, `MEDIA_IN_USE` (409). Requiere `x-csrf-token`.
+
+La limpieza de archivos huérfanos puede ejecutarse con `npm run media:cleanup` (simulación) y `npm run media:cleanup -- --apply` (elimina).
 
 ## Formato de error
 
@@ -429,6 +600,7 @@ El resultado se usa como `imageUrl` de producto o `heroImageUrl`. Los archivos s
 | `413`       | Payload o archivo demasiado grande.                     |
 | `415`       | Tipo de archivo no permitido o SVG inseguro.            |
 | `429`       | Rate limit excedido.                                    |
+| `502`       | Falló el envío de un correo de prueba.                  |
 | `503`       | MongoDB no disponible, panel o WhatsApp sin configurar. |
 | `500`       | Error inesperado, sin detalles internos.                |
 

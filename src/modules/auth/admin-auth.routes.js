@@ -17,13 +17,18 @@ const loginSchema = z.object({
     .max(200, 'La contraseña es demasiado larga.'),
 });
 
-export function createAdminAuthRouter({ adminAuth, rateLimitEnabled = true }) {
+export function createAdminAuthRouter({
+  adminAuth,
+  rateLimitEnabled = true,
+  rateLimitStoreFor = null,
+}) {
   const router = Router();
   const loginLimiter = createRateLimiter({
     windowMs: 15 * 60 * 1000,
     limit: 5,
     message: 'Demasiados intentos de acceso. Esperá unos minutos antes de reintentar.',
     enabled: rateLimitEnabled,
+    store: rateLimitStoreFor?.('login'),
   });
 
   router.post('/login', loginLimiter, async (request, response) => {

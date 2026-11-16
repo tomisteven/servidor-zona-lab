@@ -13,15 +13,16 @@ const slugSchema = z
     'El slug solo admite minúsculas, números y guiones simples.',
   );
 
-const imageUrlSchema = z
+const mediaUrlSchema = z
   .string()
   .trim()
   .max(500, 'La URL de imagen es demasiado larga.')
   .refine(
     (value) => value === '' || /^\/uploads\/media\/[A-Za-z0-9._-]+$/.test(value),
     'La imagen debe provenir de una carga válida.',
-  )
-  .default('');
+  );
+
+const imageUrlSchema = mediaUrlSchema.default('');
 
 const priceTierSchema = z.object({
   minQuantity: z.coerce
@@ -63,14 +64,18 @@ const optionGroupSchema = z.object({
 });
 
 function validateTiers(tiers, context) {
-  const sortedTiers = [...tiers].sort((left, right) => left.minQuantity - right.minQuantity);
+  const sortedTiers = tiers
+    .map((tier, originalIndex) => ({ tier, originalIndex }))
+    .sort((left, right) => left.tier.minQuantity - right.tier.minQuantity);
   let previousMax = 0;
 
-  sortedTiers.forEach((tier, index) => {
+  sortedTiers.forEach(({ tier, originalIndex }, index) => {
+    const tierPath = ['priceTiers', originalIndex];
+
     if (tier.maxQuantity !== null && tier.maxQuantity < tier.minQuantity) {
       context.addIssue({
         code: 'custom',
-        path: ['priceTiers', index, 'maxQuantity'],
+        path: [...tierPath, 'maxQuantity'],
         message: 'La cantidad máxima no puede ser menor que la mínima.',
       });
     }
@@ -78,7 +83,7 @@ function validateTiers(tiers, context) {
     if (tier.minQuantity <= previousMax) {
       context.addIssue({
         code: 'custom',
-        path: ['priceTiers', index, 'minQuantity'],
+        path: [...tierPath, 'minQuantity'],
         message: 'Los tramos de cantidad no pueden superponerse.',
       });
     }
@@ -86,7 +91,7 @@ function validateTiers(tiers, context) {
     if (previousMax === null) {
       context.addIssue({
         code: 'custom',
-        path: ['priceTiers', index, 'minQuantity'],
+        path: [...tierPath, 'minQuantity'],
         message: 'Un tramo abierto debe ser el último.',
       });
     }
@@ -94,7 +99,7 @@ function validateTiers(tiers, context) {
     if (tier.maxQuantity === null && index !== sortedTiers.length - 1) {
       context.addIssue({
         code: 'custom',
-        path: ['priceTiers', index, 'maxQuantity'],
+        path: [...tierPath, 'maxQuantity'],
         message: 'Solo el último tramo puede no tener cantidad máxima.',
       });
     }
@@ -114,12 +119,24 @@ export const productInputSchema = z
       error: 'Seleccioná una categoría válida.',
     }),
     shortDescription: z.string().trim().min(1, 'La descripción breve es obligatoria.').max(240),
+    seoTitle: z.string().trim().max(70, 'El título SEO admite hasta 70 caracteres.').default(''),
+    seoDescription: z
+      .string()
+      .trim()
+      .max(160, 'La descripción SEO admite hasta 160 caracteres.')
+      .default(''),
     description: z.string().trim().max(5000).default(''),
     features: z
       .array(z.string().trim().min(1).max(120))
       .max(12, 'Agregá hasta 12 características.')
       .default([]),
     imageUrl: imageUrlSchema,
+    imageAlt: z
+      .string()
+      .trim()
+      .max(200, 'El texto alternativo admite hasta 200 caracteres.')
+      .default(''),
+    images: z.array(mediaUrlSchema).max(10, 'El producto admite hasta 10 imágenes.').default([]),
     active: z.boolean().default(true),
     minimumQuantity: z.coerce
       .number()
@@ -142,6 +159,14 @@ export const productInputSchema = z
   })
   .superRefine((product, context) => {
     validateTiers(product.priceTiers, context);
+
+    if (new Set(product.images).size !== product.images.length) {
+      context.addIssue({
+        code: 'custom',
+        path: ['images'],
+        message: 'Las imágenes del producto no pueden repetirse.',
+      });
+    }
 
     const groupNames = new Set();
 
@@ -186,6 +211,7 @@ function createProductQuerySchema(maxLimit) {
     limit: z.coerce.number().int().min(1).max(maxLimit).default(12),
     category: z.enum(PRODUCT_CATEGORY_VALUES).optional(),
     search: z.string().trim().max(80, 'La búsqueda admite hasta 80 caracteres.').optional(),
+    sort: z.enum(['newest', 'oldest', 'name']).default('newest'),
   });
 }
 

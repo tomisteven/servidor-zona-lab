@@ -30,6 +30,14 @@ function normalizeError(error) {
       });
     }
 
+    if (error.code === 'LIMIT_FIELD_VALUE') {
+      return new AppError({
+        message: 'Los datos del pedido superan el tamaño máximo permitido.',
+        statusCode: 413,
+        code: 'FIELD_TOO_LARGE',
+      });
+    }
+
     return new AppError({
       message: 'No se pudo procesar el archivo enviado.',
       statusCode: 400,

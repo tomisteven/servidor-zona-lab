@@ -1,5 +1,6 @@
 import { isValidObjectId } from 'mongoose';
 
+import { buildCsv } from '../../shared/csv.js';
 import { AppError } from '../../shared/errors/app-error.js';
 import { PRODUCT_CATEGORIES } from './catalog.constants.js';
 import { Product } from './product.model.js';
@@ -44,9 +45,28 @@ async function findAvailableSlug(baseSlug) {
   });
 }
 
+function normalizeImages(input) {
+  const images = [];
+
+  for (const candidate of [input.imageUrl, ...(input.images ?? [])]) {
+    const value = String(candidate ?? '').trim();
+
+    if (value && !images.includes(value)) {
+      images.push(value);
+    }
+  }
+
+  return images.slice(0, 10);
+}
+
 function normalizeProductData(input) {
+  const images = normalizeImages(input);
+  const imageUrl = String(input.imageUrl ?? '').trim() || images[0] || '';
+
   return {
     ...input,
+    imageUrl,
+    images,
     features: [...input.features],
     priceTiers: [...input.priceTiers]
       .sort((left, right) => left.minQuantity - right.minQuantity)
@@ -100,12 +120,29 @@ export function getCategories() {
   return PRODUCT_CATEGORIES.map((category) => ({ ...category }));
 }
 
-export async function listProducts({ page, limit, category, search, includeInactive = false }) {
+const SORT_OPTIONS = {
+  newest: { createdAt: -1, _id: -1 },
+  oldest: { createdAt: 1, _id: 1 },
+  name: { name: 1, _id: 1 },
+};
+
+export async function listProducts({
+  page,
+  limit,
+  category,
+  search,
+  sort = 'newest',
+  includeInactive = false,
+}) {
   const filter = buildListFilter({ category, search, includeInactive });
   const skip = (page - 1) * limit;
 
   const [products, total] = await Promise.all([
-    Product.find(filter).sort({ createdAt: -1, _id: -1 }).skip(skip).limit(limit).lean(),
+    Product.find(filter)
+      .sort(SORT_OPTIONS[sort] ?? SORT_OPTIONS.newest)
+      .skip(skip)
+      .limit(limit)
+      .lean(),
     Product.countDocuments(filter),
   ]);
 
@@ -118,6 +155,50 @@ export async function listProducts({ page, limit, category, search, includeInact
       totalPages: total === 0 ? 0 : Math.ceil(total / limit),
     },
   };
+}
+
+export async function exportProductsCsv({ category, search, includeInactive = false }) {
+  const filter = buildListFilter({ category, search, includeInactive });
+  const products = await Product.find(filter).sort({ createdAt: -1, _id: -1 }).lean();
+
+  return buildCsv(
+    [
+      { key: 'id', label: 'ID' },
+      { key: 'name', label: 'Nombre' },
+      { key: 'slug', label: 'Slug' },
+      { key: 'category', label: 'Categoria' },
+      { key: 'categoryLabel', label: 'Categoria label' },
+      { key: 'active', label: 'Activo' },
+      { key: 'minimumQuantity', label: 'Cantidad minima' },
+      { key: 'startingUnitPrice', label: 'Precio desde' },
+      { key: 'personalizationFee', label: 'Personalizacion' },
+      { key: 'imageUrl', label: 'Imagen' },
+      { key: 'seoTitle', label: 'SEO title' },
+      { key: 'seoDescription', label: 'SEO description' },
+      { key: 'createdAt', label: 'Creado' },
+      { key: 'updatedAt', label: 'Actualizado' },
+    ],
+    products.map((product) => {
+      const summary = toProductSummary(product);
+
+      return {
+        id: summary.id,
+        name: summary.name,
+        slug: summary.slug,
+        category: summary.category,
+        categoryLabel: summary.categoryLabel,
+        active: product.active ? 'si' : 'no',
+        minimumQuantity: summary.minimumQuantity,
+        startingUnitPrice: summary.startingUnitPrice ?? '',
+        personalizationFee: summary.personalizationFee,
+        imageUrl: summary.imageUrl,
+        seoTitle: product.seoTitle ?? '',
+        seoDescription: product.seoDescription ?? '',
+        createdAt: product.createdAt?.toISOString?.() ?? '',
+        updatedAt: product.updatedAt?.toISOString?.() ?? '',
+      };
+    }),
+  );
 }
 
 export async function getProductBySlug(slug) {

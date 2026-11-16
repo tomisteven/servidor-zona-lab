@@ -14,6 +14,7 @@ const SUPPORTED_LOG_LEVELS = new Set([
   'silent',
 ]);
 const MONGODB_URI_PATTERN = /^mongodb(\+srv)?:\/\/\S+$/;
+const REDIS_URL_PATTERN = /^rediss?:\/\/\S+$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ADMIN_PASSWORD_HASH_PATTERN = /^scrypt\$[0-9a-f]{32}\$[0-9a-f]{128}$/;
 const WHATSAPP_CHARACTERS_PATTERN = /^\+?[\d\s()-]+$/;
@@ -51,6 +52,22 @@ function parseMongodbUri(rawValue, errors) {
 
   if (!MONGODB_URI_PATTERN.test(value)) {
     errors.push('MONGODB_URI debe usar el esquema mongodb:// o mongodb+srv://.');
+  }
+
+  return value;
+}
+
+function parseRedisUrl(rawValue, errors) {
+  const value = String(rawValue ?? '').trim();
+
+  if (!value) {
+    return null;
+  }
+
+  if (!REDIS_URL_PATTERN.test(value)) {
+    errors.push('REDIS_URL debe usar el esquema redis:// o rediss://.');
+
+    return null;
   }
 
   return value;
@@ -130,6 +147,46 @@ function parseTrustProxy(rawValue, errors) {
 
   errors.push('TRUST_PROXY debe ser true o false.');
   return false;
+}
+
+function parseCloudinaryConfiguration(source, errors) {
+  const values = {
+    cloudinaryCloudName: String(source.CLOUDINARY_CLOUD_NAME ?? '').trim(),
+    cloudinaryApiKey: String(source.CLOUDINARY_API_KEY ?? '').trim(),
+    cloudinaryApiSecret: String(source.CLOUDINARY_API_SECRET ?? '').trim(),
+    cloudinaryFolder: String(source.CLOUDINARY_FOLDER ?? '').trim() || 'zona-lab/media',
+  };
+  const configured = [
+    values.cloudinaryCloudName,
+    values.cloudinaryApiKey,
+    values.cloudinaryApiSecret,
+  ].filter(Boolean).length;
+
+  if (configured === 0) {
+    return { ...values, cloudinaryEnabled: false };
+  }
+
+  if (configured < 3) {
+    errors.push(
+      'CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY y CLOUDINARY_API_SECRET deben configurarse juntos.',
+    );
+
+    return { ...values, cloudinaryEnabled: false };
+  }
+
+  let valid = true;
+
+  if (!/^[a-z0-9_-]+$/i.test(values.cloudinaryCloudName)) {
+    errors.push('CLOUDINARY_CLOUD_NAME contiene caracteres inválidos.');
+    valid = false;
+  }
+
+  if (!/^[A-Za-z0-9/_-]+$/.test(values.cloudinaryFolder)) {
+    errors.push('CLOUDINARY_FOLDER solo admite letras, números, guiones, guiones bajos y barras.');
+    valid = false;
+  }
+
+  return { ...values, cloudinaryEnabled: valid };
 }
 
 function parseLogLevel(rawValue, errors) {
@@ -240,18 +297,21 @@ export function validateEnvironment(source = {}) {
   const errors = [];
   const nodeEnv = parseNodeEnvironment(source.NODE_ENV, errors);
   const adminConfiguration = parseAdminConfiguration(source, nodeEnv, errors);
+  const cloudinaryConfiguration = parseCloudinaryConfiguration(source, errors);
 
   const environment = {
     nodeEnv,
     isProduction: nodeEnv === 'production',
     port: parsePort(source.PORT, errors),
     mongodbUri: parseMongodbUri(source.MONGODB_URI, errors),
+    redisUrl: parseRedisUrl(source.REDIS_URL, errors),
     corsOrigins: parseCorsOrigins(source.CORS_ORIGINS, errors),
     cookieSameSite: parseCookieSameSite(source.COOKIE_SAME_SITE, errors),
     trustProxy: parseTrustProxy(source.TRUST_PROXY, errors),
     logLevel: parseLogLevel(source.LOG_LEVEL, errors),
     whatsappNumber: parseWhatsappNumber(source.WHATSAPP_NUMBER, errors),
     ...adminConfiguration,
+    ...cloudinaryConfiguration,
   };
 
   if (errors.length > 0) {
